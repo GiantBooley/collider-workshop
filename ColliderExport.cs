@@ -11,13 +11,15 @@ public class ColliderExport : Editor
     [MenuItem("Assets/Export Colliders")]
     static void Do()
     {
-        string parentNameWithoutSlashAfter = "/thanks";
+        // Settings
+        string parentNameWithoutSlashAfter = "/Terrain";
+        string collidersTextFilePath = "D:/colliderworkshop/colliders.txt";
 
 
 
         GameObject parent = GameObject.Find(parentNameWithoutSlashAfter);
         int howmany = parent.transform.childCount;
-        using (StreamWriter sw = File.CreateText("D:/html/colliderworkshop/colliders.txt")) {
+        using (StreamWriter sw = File.CreateText(collidersTextFilePath)) {
             for (int i = 0; i < howmany; i++) { // for each object
                 GameObject spriteObject = parent.transform.GetChild(i).gameObject;
                 SpriteRenderer spriteComponent = spriteObject.GetComponent<SpriteRenderer>();
@@ -26,6 +28,9 @@ public class ColliderExport : Editor
 					string dataPath = Application.dataPath;
 					dataPath = dataPath.Substring(0, dataPath.Length - 6);//remove assets and stuff
                     sw.WriteLine(dataPath + AssetDatabase.GetAssetPath(spriteComponent.sprite)); // image path
+                    // bounds
+                    Rect rect = spriteComponent.sprite.textureRect;
+                    sw.WriteLine(rect.xMin.ToString() + "," + rect.yMin.ToString() + "," + rect.xMax.ToString() + "," + rect.yMax.ToString());
                 }
             }
         }

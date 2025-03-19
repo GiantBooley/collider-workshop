@@ -12,6 +12,9 @@ public class ColliderImport : Editor
     [MenuItem("Assets/Import Colliders")]
     static void Do()
     {
+		string physicsMaterialPathWithoutSlashAfter = "Assets/GOIWBF Level Tools/Tool/Scripts";
+		
+		
         FileInfo theSourceFile = null;
         StreamReader reader = null;
         string text = " "; // assigned to allow first line to be read below
@@ -105,7 +108,7 @@ public class ColliderImport : Editor
                     GroundCol col = collider.AddComponent<GroundCol>();
                     col.material = (GroundCol.SoundMaterial)hitSound;
                 }
-                PhysicsMaterial2D physicsMaterial = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>("Assets/GOIWBF Level Tools/Tool/Scripts/" + frictionName + ".asset");
+                PhysicsMaterial2D physicsMaterial = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>(physicsMaterialPathWithoutSlashAfter + "/" + frictionName + ".asset");
                 collider.GetComponent<PolygonCollider2D>().sharedMaterial = physicsMaterial;
                 howman = -2;
             }
