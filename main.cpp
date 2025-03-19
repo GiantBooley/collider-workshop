@@ -5,6 +5,8 @@
 #include <sstream>
 #include <vector>
 #include <map>
+#include <memory>
+#include <filesystem>
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -75,13 +77,13 @@ string hitSoundNames[10] = {
 	"Snake",
 	"SolidMetal"
 };
-const int howmanycustomnames = 11;
+const int howmanycustomnames = 14;
 string customHitSoundNames[howmanycustomnames] = {
-	"LeafLight", "FluffySnow", "Chain", "Porcelain", "Bone", "Bottle", "Frosting", "Pumpkin", "HollowPaper", "Leaf", "Gingerbread"
+	"LeafLight", "FluffySnow", "Chain", "Porcelain", "Bone", "Bottle", "Frosting", "Pumpkin", "HollowPaper", "Leaf", "Gingerbread", "SolidPlastic", "SmallPlastic", "RustyMetal"
 };
 const int howmanyfriction = 13;
 string frictionNames[howmanyfriction] = {
-	"25", "0.5", "1", "3", "25", "1000", "Anvil", "bouncy candy", "NoFriction", "PartialFriction", "SlidingFriction", "StaticFriction", "SuperFriction"
+	"25", "0.5", "1", "3", "25", "1000", "Anvil", "bouncy candy", "NoFriction", "PartialFriction", "SlidingFriction", "StaticFriction", "Superfriction"
 };
 class Polygon {
 public:
@@ -106,6 +108,7 @@ public:
 
 class Texture {
 public:
+	string path;
 	int width, height, numChannels;
 	unsigned int texture;
 	unsigned char* data;
@@ -116,7 +119,8 @@ public:
 	~Texture() {
 		stbi_image_free(data);
 	}
-	void load(const char* path) {
+	void load(const char* patha) {
+		path = patha;
 		stbi_set_flip_vertically_on_load(true);
 		glGenTextures(1, &texture);
 		glBindTexture(GL_TEXTURE_2D, texture);
@@ -126,8 +130,8 @@ public:
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 
-		data = stbi_load(path, &width, &height, &numChannels, 0);
-		cout << "tex has " << numChannels << " color channels" << endl;
+		data = stbi_load(patha, &width, &height, &numChannels, 0);
+		cout << "tex \"" << path << "\" has " << numChannels << " color channels" << endl;
 		if (data) {
 			glTexImage2D(GL_TEXTURE_2D, 0, numChannels == 4 ? GL_RGBA : GL_RGB, width, height, 0, numChannels == 4 ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, data);
 		} else {
@@ -138,21 +142,44 @@ public:
 		glBindTexture(GL_TEXTURE_2D, texture);
 	}
 };
+vector<shared_ptr<Texture>> texturesLoaded = {};
+shared_ptr<Texture> getTexture(const char* path) {
+	filesystem::path file{path};
+	for (shared_ptr<Texture> t : texturesLoaded) {
+		filesystem::path texFile{t->path.c_str()};
+		if (filesystem::equivalent(file, texFile)) {
+			return t;
+		}
+	}
+	shared_ptr<Texture> texture = make_shared<Texture>(path);
+	texturesLoaded.push_back(texture);
+	return texture;
+}
 class Sprite {
 public:
 	string fileName;
 	string objectName;
-	Texture tex;
+	shared_ptr<Texture> tex;
 	vector<Polygon> polygons;
 	float width, height;
-	Sprite(string objectnamea, string filenamea) {
+	float minX, minY, maxX, maxY;
+	int pixelMinX, pixelMinY, pixelMaxX, pixelMaxY;
+	Sprite(string objectnamea, string filenamea, float minx, float miny, float maxx, float maxy) {
 		fileName = filenamea;
+		tex = getTexture(fileName.c_str());
+		minX = minx / (float)tex->width;
+		minY = miny / (float)tex->height;
+		maxX = maxx / (float)tex->width;
+		maxY = maxy / (float)tex->height;
+		pixelMinX = (int)minx;
+		pixelMinY = (int)miny;
+		pixelMaxX = (int)maxx;
+		pixelMaxY = (int)maxy;
 		objectName = objectnamea;
-		tex.load(fileName.c_str());
-		width = (float)tex.width / 100.f;
-		height = (float)tex.height / 100.f;
+		width = (float)(pixelMaxX - pixelMinX) / 100.f;
+		height = (float)(pixelMaxY - pixelMinY) / 100.f;
 
-		polygons.push_back({{{-width / 2.f,-height / 2.f},{-width / 2.f,height / 2.f},{width / 2.f,height / 2.f},{width / 2.f,-height / 2.f}}, false,SoundMaterial::rock, "", 0});
+		polygons.push_back({{{-width / 2.f,-height / 2.f},{-width / 2.f,height / 2.f},{width / 2.f,height / 2.f},{width / 2.f,-height / 2.f}}, false, SoundMaterial::rock, "", 0});
 	}
 };
 class Shader {
@@ -227,10 +254,11 @@ public:
 };
 class SpriteShader : public Shader {
 public:
-	unsigned int textureLoc, transformLoc;
+	unsigned int textureLoc, transformLoc, boundsLoc;
 	SpriteShader(const char* vertexPath, const char* fragmentPath) : Shader(vertexPath, fragmentPath) {
 		textureLoc = glGetUniformLocation(ID, "texture");
 		transformLoc = glGetUniformLocation(ID, "transform");
+		boundsLoc = glGetUniformLocation(ID, "bounds");
 	}
 };
 class LineShader : public Shader {
@@ -366,12 +394,12 @@ struct iVec2 {
 };
 void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 	const unsigned char alphaThreshold = 127;
-	int w = sprite->tex.width;
-	int h = sprite->tex.height;
+	int w = sprite->tex->width;
+	int h = sprite->tex->height;
 	bool exit = false;
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			if (sprite->tex.data[(y * w + x) * 4 + 3] > alphaThreshold) {
+	for (int y = sprite->pixelMinY; y < sprite->pixelMaxY; y++) {
+		for (int x = sprite->pixelMinX; x < sprite->pixelMaxX; x++) {
+			if (sprite->tex->data[(y * w + x) * 4 + 3] > alphaThreshold) {
 				exit = true;
 				x--;
 				int startX = x;
@@ -384,7 +412,7 @@ void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 						for (int mx = 0; mx < 3; mx++) {
 							int ecks = x + mx - 1;
 							int why = y + my - 1;
-							matrix[my * 3 + mx] = (ecks >= 0 && ecks < w && why >= 0 && why < h) && (sprite->tex.data[(why * w + ecks) * 4 + 3] > alphaThreshold);
+							matrix[my * 3 + mx] = (ecks >= 0 && ecks < w && why >= 0 && why < h) && (sprite->tex->data[(why * w + ecks) * 4 + 3] > alphaThreshold);
 						}
 					}
 					float pointX = 0.f;
@@ -459,7 +487,10 @@ void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 						}
 					}
 					if (doAddPoint) {
-						sprite->polygons[0].points.push_back({pointX / 100.f - sprite->width / 2.f, pointY / 100.f - sprite->height / 2.f});
+						sprite->polygons[0].points.push_back({
+							(pointX - sprite->pixelMinX) / 100.f - sprite->width / 2.f,
+							(pointY - sprite->pixelMinY) / 100.f - sprite->height / 2.f
+						});
 					}
 				}
 			}
@@ -603,7 +634,7 @@ int main(void) {
 	SpriteShader spriteShader{"vertex.vsh", "fragment.fsh"};
 	LineShader lineShader{"vertex.vsh", "line.fsh"};
 	GlyphShader glyphShader{"vertex.vsh", "glyph.fsh"};
-	Texture buttonTex{"button.png"};
+	shared_ptr<Texture> buttonTex = getTexture("button.png");
 	vector<Sprite*> sprites = {};
 
 	string colliderFileText = readFileText("colliders.txt");
@@ -611,12 +642,21 @@ int main(void) {
 
 	int howman = 0;
 	string objectName, spriteFileName;
+	float minX, minY, maxX, maxY;
 	for (std::string line; std::getline(iss, line);) {
-		if (howman % 2 == 0) {
+		if (howman % 3 == 0) { // name
 			objectName = line;
-		} else if (howman % 2 == 1) {
+		} else if (howman % 3 == 1) { // sprite path
 			spriteFileName = line;
-			sprites.push_back(new Sprite(objectName, spriteFileName));
+		} else if (howman % 3 == 2) { // bounds
+			stringstream boundsStringStream{line};
+			string boundNumberString;
+			vector<float> boundNumbers = {};
+			while (getline(boundsStringStream, boundNumberString, ',')) {
+				boundNumbers.push_back(stof(boundNumberString));
+			}
+			Sprite* sprite = new Sprite(objectName, spriteFileName, boundNumbers.at(0), boundNumbers.at(1), boundNumbers.at(2), boundNumbers.at(3));
+			sprites.push_back(sprite);
 		}
 		howman++;
 	}
@@ -990,8 +1030,9 @@ int main(void) {
 		glm::mat4 proj = glm::ortho(bounds.l, bounds.r, bounds.b, bounds.t, -1.f, 1.f);
 		glm::mat4 trans = proj * model;
 		spriteShader.use();
-		sprites[currentSprite]->tex.use();
+		sprites[currentSprite]->tex->use();
 		glUniformMatrix4fv(spriteShader.transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+		glUniform4f(spriteShader.boundsLoc, sprites[currentSprite]->minX, sprites[currentSprite]->minY, sprites[currentSprite]->maxX, sprites[currentSprite]->maxY);
 
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -1119,8 +1160,9 @@ int main(void) {
 
 			trans = screenSpaceProj * model;
 			spriteShader.use();
-			buttonTex.use();
+			buttonTex->use();
 			glUniformMatrix4fv(spriteShader.transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+			glUniform4f(spriteShader.boundsLoc, 0.f, 0.f, 1.f, 1.f);
 
 			glBindVertexArray(VAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -1135,8 +1177,9 @@ int main(void) {
 
 			trans = screenSpaceProj * model;
 			spriteShader.use();
-			buttonTex.use();
+			buttonTex->use();
 			glUniformMatrix4fv(spriteShader.transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+			glUniform4f(spriteShader.boundsLoc, 0.f, 0.f, 1.f, 1.f);
 
 			glBindVertexArray(VAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -1151,8 +1194,9 @@ int main(void) {
 
 			trans = screenSpaceProj * model;
 			spriteShader.use();
-			buttonTex.use();
+			buttonTex->use();
 			glUniformMatrix4fv(spriteShader.transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+			glUniform4f(spriteShader.boundsLoc, 0.f, 0.f, 1.f, 1.f);
 
 			glBindVertexArray(VAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
