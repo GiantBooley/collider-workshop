@@ -12,14 +12,14 @@ public class ColliderImport : Editor
     [MenuItem("Assets/Import Colliders")]
     static void Do()
     {
-		string physicsMaterialPathWithoutSlashAfter = "Assets/GOIWBF Level Tools/Tool/Scripts";
-		
-		
+        string collidersForUnityFileLocation = Path.Combine(Application.dataPath, "colliders_for_unity.txt");
+
+
         FileInfo theSourceFile = null;
         StreamReader reader = null;
         string text = " "; // assigned to allow first line to be read below
 
-        theSourceFile = new FileInfo("D:/html/colliderworkshop/colliders_for_unity.txt");
+        theSourceFile = new FileInfo(collidersForUnityFileLocation);
         reader = theSourceFile.OpenText();
 
         int howman = -1;
@@ -28,7 +28,7 @@ public class ColliderImport : Editor
         bool isCustomHitSound = false;
         string customHitSound = "";
         int hitSound = 0;
-        string frictionName = "";
+        string frictionPath = "";
         int line = 0;
         while ((text = reader.ReadLine()) != null) { // for each line
             if (howman == -1) { // object name
@@ -66,7 +66,7 @@ public class ColliderImport : Editor
                 }
             }
             if (howman == 3) { // friction
-                frictionName = text;
+                frictionPath = text;
             }
             if (howman == 4) { // points
                 int ecksOrWhy = 0; // 0 x 1 y
@@ -108,7 +108,7 @@ public class ColliderImport : Editor
                     GroundCol col = collider.AddComponent<GroundCol>();
                     col.material = (GroundCol.SoundMaterial)hitSound;
                 }
-                PhysicsMaterial2D physicsMaterial = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>(physicsMaterialPathWithoutSlashAfter + "/" + frictionName + ".asset");
+                PhysicsMaterial2D physicsMaterial = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>(frictionPath);
                 collider.GetComponent<PolygonCollider2D>().sharedMaterial = physicsMaterial;
                 howman = -2;
             }

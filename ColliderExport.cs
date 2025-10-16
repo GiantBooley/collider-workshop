@@ -13,7 +13,7 @@ public class ColliderExport : Editor
     {
         // Settings
         string parentNameWithoutSlashAfter = "/Terrain";
-        string collidersTextFilePath = "D:/colliderworkshop/colliders.txt";
+        string collidersTextFilePath = Path.Combine(Application.dataPath, "colliders.txt");
 
 
 

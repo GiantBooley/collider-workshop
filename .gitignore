@@ -1,6 +1,10 @@
-bin/
-obj/
-*.layout
-*.depend
-colliders.txt
-colliders_for_unity.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
+Makefile
+.cmake/
+compile_commands.json
+.vscode/
+*.kdev4
+.kdev4/
+ColliderWorkshop
