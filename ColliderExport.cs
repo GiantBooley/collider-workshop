@@ -25,8 +25,8 @@ public class ColliderExport : Editor
                 SpriteRenderer spriteComponent = spriteObject.GetComponent<SpriteRenderer>();
                 if (spriteComponent != null && spriteComponent.sprite != null) { // if it has a sprite renderer
                     sw.WriteLine(parentNameWithoutSlashAfter + "/" + spriteObject.name); // object path
-					string dataPath = Application.dataPath;
-					dataPath = dataPath.Substring(0, dataPath.Length - 6);//remove assets and stuff
+                    string dataPath = Application.dataPath;
+                    dataPath = dataPath.Substring(0, dataPath.Length - 6);//remove assets and stuff
                     sw.WriteLine(dataPath + AssetDatabase.GetAssetPath(spriteComponent.sprite)); // image path
                     // bounds
                     Rect rect = spriteComponent.sprite.textureRect;

@@ -1017,7 +1017,7 @@ int main(void) {
 				}
 			}
 			// add point if press on line
-			if (!spaceDown && closestLine != -1 && closestLineDistance < 0.2f * scale && closestPoint == -1 && draggingPoint == -1) {
+			if (!spaceDown && !ctrlKeyDown && closestLine != -1 && closestLineDistance < 0.2f * scale && closestPoint == -1 && draggingPoint == -1) {
 				if (didMousePress) {
 					float x1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).x;
 					float y1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).y;
