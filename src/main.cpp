@@ -616,7 +616,7 @@ int main(void) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	//init glfw
-	GLFWwindow* window = glfwCreateWindow(frameWidth, frameHeight, "Colliders", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(frameWidth, frameHeight, "Collider Workshop V2", NULL, NULL);
 	if (window == NULL) {
 		cout << "[ERROR] Failed to create GLFW window" << endl;
 		glfwTerminate();
