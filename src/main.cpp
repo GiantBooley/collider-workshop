@@ -11,40 +11,28 @@
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include "math.hpp"
+#include "IImageData.hpp"
+#include "ImageData.hpp"
 
-using namespace std;
 
-struct Point {
-	float x, y;
-};
-float square(float x) {
-	return x * x;
-}
-float distance(Point a, Point b) {
-	return sqrt(square(b.y - a.y) + square(b.x - a.x));
-}
 int realMod(int a, int b) {
 	if (a >= 0) return a % b; else return (b >= 0 ? b : -b) - 1 + (a + 1) % b;
 }
-float dot(Point p1, Point p2) {
-	return p1.x * p2.x + p1.y * p2.y;
-}
-bool readFileText(string path, string* text) {
-	ifstream file(path);
+bool readFileText(std::string path, std::string* text) {
+	std::ifstream file(path);
 	if (file.fail()) {
 		std::cout << "[ERROR] failed to load file \"" << path << "\"" << std::endl;
 		return false;
 	}
-	string str;
-	string file_contents = "";
+	std::string str;
+	std::string file_contents = "";
 	while (getline(file, str)) {
 		file_contents += str;
 		file_contents.push_back('\n');
@@ -52,18 +40,15 @@ bool readFileText(string path, string* text) {
 	*text = file_contents;
 	return true;
 }
-string filePathToName(string path) {
+std::string filePathToName(std::string path) {
 	int forwardslash = path.find_last_of('/');
 	int backslash = path.find_last_of('\\');
-	int slash = max(forwardslash, backslash);
+	int slash = std::max(forwardslash, backslash);
 	int dot = path.find_last_of('.');
-	if (dot == string::npos || slash == string::npos) return path;
+	if (dot == std::string::npos || slash == std::string::npos) return path;
 	return path.substr(slash + 1, dot - (slash + 1));
 }
 
-float getAbsAngleFromThreePoints(Point p1, Point p2, Point p3) {// p1 vertex
-	return abs(atan((p3.y - p1.y) / (p3.x - p1.x)) - atan((p2.y - p1.y) / (p2.x - p1.x)));
-}
 namespace SoundMaterial {
 	enum SoundMaterial {
 		rock,
@@ -78,7 +63,7 @@ namespace SoundMaterial {
 		solidmetal
 	};
 }
-string hitSoundNames[10] = {
+std::string hitSoundNames[10] = {
 	"Rock",
 	"Wood",
 	"Metal",
@@ -92,99 +77,46 @@ string hitSoundNames[10] = {
 };
 class Polygon {
 public:
-	vector<Point> points;
+	std::vector<Vec2f> points;
 	SoundMaterial::SoundMaterial hitSound;
 	bool isCustomHitSound;
-	string customHitSound;
-	int frictionIndex;
+	std::string customHitSoundName;
+	std::string frictionAssetPath;
 	unsigned char r, g, b;
 
-	Polygon(vector<Point> ponts, bool isCustom, SoundMaterial::SoundMaterial sond, string customsond, int fricton) {
-		points = ponts;
-		hitSound = sond;
-		customHitSound = customsond;
-		isCustomHitSound = isCustom;
-		frictionIndex = fricton;
-		r = 128;
-		g = 128;
-		b = 128;
-	}
+	Polygon(
+		std::vector<Vec2f> points2,
+		 SoundMaterial::SoundMaterial hitSound2,
+		 bool isCustomHitSound2,
+		 std::string customHitSoundName2,
+		 std::string frictionAssetPath2
+	) : points(points2), hitSound(hitSound2), isCustomHitSound(isCustomHitSound2), customHitSoundName(customHitSoundName2), frictionAssetPath(frictionAssetPath2), r(128), g(128), b(128) {}
 };
 
-class Texture {
-public:
-	string path;
-	int width, height, numChannels;
-	unsigned int texture;
-	unsigned char* data;
-	Texture() {}
-	Texture(const char* path) {
-		load(path);
-	}
-	~Texture() {
-		stbi_image_free(data);
-	}
-	void load(const char* patha) {
-		path = patha;
-		stbi_set_flip_vertically_on_load(true);
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-		data = stbi_load(patha, &width, &height, &numChannels, 0);
-		cout << "[INFO] Loaded texture: \"" << path << "\" (" << width << "x" << height << ")" << endl;
-		if (data) {
-			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-			glTexImage2D(GL_TEXTURE_2D, 0, numChannels == 4 ? GL_RGBA : GL_RGB, width, height, 0, numChannels == 4 ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, data);
-		} else {
-			cout << "[ERROR] failed to load texture: \"" << path << "\"" << endl;
-		}
-	}
-	void use() {
-		glBindTexture(GL_TEXTURE_2D, texture);
-	}
-};
-vector<shared_ptr<Texture>> texturesLoaded = {};
-shared_ptr<Texture> getTexture(const char* path) {
-	filesystem::path file{path};
-	for (shared_ptr<Texture> t : texturesLoaded) {
-		filesystem::path texFile{t->path.c_str()};
-		if (filesystem::equivalent(file, texFile)) {
-			return t;
-		}
-	}
-	shared_ptr<Texture> texture = make_shared<Texture>(path);
-	texturesLoaded.push_back(texture);
-	return texture;
-}
 class Sprite {
 public:
-	string fileName;
-	string objectName;
-	shared_ptr<Texture> tex;
-	vector<Polygon> polygons;
-	float width, height;
+	std::string objectPath;
+	std::filesystem::path texturePath;
+	std::shared_ptr<IImageData> image;
+	std::vector<Polygon> polygons;
+	float pixelsPerUnit;
 	float minX, minY, maxX, maxY;
-	int pixelMinX, pixelMinY, pixelMaxX, pixelMaxY;
-	Sprite(string objectnamea, string filenamea, float minx, float miny, float maxx, float maxy) {
-		fileName = filenamea;
-		tex = getTexture(fileName.c_str());
-		minX = minx / (float)tex->width;
-		minY = miny / (float)tex->height;
-		maxX = maxx / (float)tex->width;
-		maxY = maxy / (float)tex->height;
-		pixelMinX = (int)minx;
-		pixelMinY = (int)miny;
-		pixelMaxX = (int)maxx;
-		pixelMaxY = (int)maxy;
-		objectName = objectnamea;
-		width = (float)(pixelMaxX - pixelMinX) / 100.f;
-		height = (float)(pixelMaxY - pixelMinY) / 100.f;
+	Sprite(
+		std::string objectPath2,
+		std::string texturePath2,
+		float pixelsPerUnit2,
+		float minX2,
+		float minY2,
+		float maxX2,
+		float maxY2
+	) : objectPath(objectPath2), texturePath(texturePath2), pixelsPerUnit(pixelsPerUnit2), minX(minX2), minY(minY2), maxX(maxX2), maxY(maxY2), polygons() {
 
+		image = std::static_pointer_cast<IImageData>(std::make_shared<ImageData<uint8_t>>(texturePath.c_str(), 255));
 		polygons.push_back({{{-width / 2.f,-height / 2.f},{-width / 2.f,height / 2.f},{width / 2.f,height / 2.f},{width / 2.f,-height / 2.f}}, false, SoundMaterial::rock, "", 0});
+	}
+
+	float getWidth() const {
+		return (maxX - minX) / pixelsPerUnit;
 	}
 };
 class Shader {
@@ -192,24 +124,24 @@ public:
 	unsigned int ID;
 
 	Shader(const char* vertexPath, const char* fragmentPath) {
-		string vertexText;
-		string fragmentText;
-		ifstream vertexFile;
-		ifstream fragmentFile;
-		vertexFile.exceptions(ifstream::failbit | ifstream::badbit);
-		fragmentFile.exceptions(ifstream::failbit | ifstream::badbit);
+		std::string vertexText;
+		std::string fragmentText;
+		std::ifstream vertexFile;
+		std::ifstream fragmentFile;
+		vertexFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		fragmentFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 		try {
 			vertexFile.open(vertexPath);
 			fragmentFile.open(fragmentPath);
-			stringstream vertexStream, fragmentStream;
+			std::stringstream vertexStream, fragmentStream;
 			vertexStream << vertexFile.rdbuf();
 			fragmentStream << fragmentFile.rdbuf();
 			vertexFile.close();
 			fragmentFile.close();
 			vertexText = vertexStream.str();
 			fragmentText = fragmentStream.str();
-		} catch (ifstream::failure e) {
-			cout << "[ERROR] failed to get fragment or vertex text" << endl;
+		} catch (std::ifstream::failure e) {
+			std::cout << "[ERROR] failed to get fragment or vertex text" << std::endl;
 		}
 		const char* vertexCode = vertexText.c_str();
 		const char* fragmentCode = fragmentText.c_str();
@@ -230,12 +162,12 @@ public:
 		glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
 		if (!success) {
 			glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-			cout << "[ERROR] vertex shader compile failed\n" << infoLog << endl;
+			std::cout << "[ERROR] vertex shader compile failed\n" << infoLog << std::endl;
 		}
 		glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
 		if (!success) {
 			glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-			cout << "[ERROR] fragment shader compile failed\n" << infoLog << endl;
+			std::cout << "[ERROR] fragment shader compile failed\n" << infoLog << std::endl;
 		}
 
 		ID = glCreateProgram();
@@ -247,7 +179,7 @@ public:
 		glGetProgramiv(ID, GL_LINK_STATUS, &success);
 		if (!success) {
 			glGetProgramInfoLog(ID, 512, NULL, infoLog);
-			cout << "[ERROR] program failed linking\n" << infoLog << endl;
+			std::cout << "[ERROR] program failed linking\n" << infoLog << std::endl;
 		}
 
 		glDeleteShader(vertex);
@@ -272,14 +204,6 @@ public:
 	LineShader(const char* vertexPath, const char* fragmentPath) : Shader(vertexPath, fragmentPath) {
 		transformLoc = glGetUniformLocation(ID, "transform");
 		colorLoc = glGetUniformLocation(ID, "color");
-	}
-};
-class GlyphShader : public Shader {
-public:
-	unsigned int transformLoc, textColorLoc;
-	GlyphShader(const char* vertexPath, const char* fragmentPath) : Shader(vertexPath, fragmentPath) {
-		transformLoc = glGetUniformLocation(ID, "transform");
-		textColorLoc = glGetUniformLocation(ID, "textColor");
 	}
 };
 
@@ -364,7 +288,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	}
 }
 bool isPathLoaded = false;
-string pathToLoad;
+std::string pathToLoad;
 void drop_callback(GLFWwindow* window, int count, const char** paths) {
 	if (count != 1) return;
 	isPathLoaded = true;
@@ -384,33 +308,17 @@ unsigned int indices[] = {
 struct AABB {
 	float l, r, b, t;
 };
-float lerp(float a, float b, float t) {
-	return (b - a) * t + a;
-}
 AABB getViewBounds(float zoom, float cameraX, float cameraY) {
 	float aspect = (float)frameWidth / (float)frameHeight;
 	return {-zoom / 2.f * aspect - cameraX, zoom / 2.f * aspect - cameraX, -zoom / 2.f - cameraY, zoom / 2.f - cameraY};
 }
-float distanceFromPointToLine(float x, float y, float x1, float y1, float x2, float y2) {
-	if (x1 == x2) return abs(x - x1);
-	float slope = (y2 - y1) / (x2 - x1);
-	return abs(slope * (x - x1) - y + y1) / sqrt(slope * slope + 1.f);
-}
-float getPointProgressAlongLine(float x, float y, float x1, float y1, float x2, float y2) {
-	if (x1 == x2) return (y - y1) / (y2 - y1);
-	float slope = (y2 - y1) / (x2 - x1);
-	return ((x + slope * (y - y1 + slope * x1)) / (slope * slope + 1.f) - x1) / (x2 - x1);
-}
-struct iVec2 {
-	int x, y;
-};
 void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 	const unsigned char alphaThreshold = 127;
 	int w = sprite->tex->width;
 	int h = sprite->tex->height;
 	bool exit = false;
-	for (int y = sprite->pixelMinY; y < sprite->pixelMaxY; y++) {
-		for (int x = sprite->pixelMinX; x < sprite->pixelMaxX; x++) {
+	for (int y = sprite->minY; y < sprite->maxY; y++) {
+		for (int x = sprite->minX; x < sprite->maxX; x++) {
 			if (sprite->tex->data[(y * w + x) * 4 + 3] > alphaThreshold) {
 				exit = true;
 				x--;
@@ -500,8 +408,8 @@ void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 					}
 					if (doAddPoint) {
 						sprite->polygons[0].points.push_back({
-							(pointX - sprite->pixelMinX) / 100.f - sprite->width / 2.f,
-							(pointY - sprite->pixelMinY) / 100.f - sprite->height / 2.f
+							(pointX - sprite->minX) / 100.f - sprite->width / 2.f,
+							(pointY - sprite->minY) / 100.f - sprite->height / 2.f
 						});
 					}
 				}
@@ -512,78 +420,17 @@ void generateCollider(Sprite* sprite) { // 0 1 2 3 clockwise
 	}
 }
 
-struct Character {
-    unsigned int TextureID;  // ID handle of the glyph texture
-    glm::ivec2   Size;       // Size of glyph
-    glm::ivec2   Bearing;    // Offset from baseline to left/top of glyph
-    unsigned int Advance;    // Offset to advance to next glyph
-};
-std::map<char, Character> Characters;
-void renderText(GlyphShader &s, string text, float x, float y, float scale, glm::vec4 color, unsigned int VAO, glm::mat4* vp) {
-    // activate corresponding render state
-    s.use();
-    glUniform4f(s.textColorLoc, color.x, color.y, color.z, color.w);
-    glActiveTexture(GL_TEXTURE0);
-
-	// iterate through all characters
-	std::string::const_iterator c;
-	for (c = text.begin(); c != text.end(); c++) {
-		Character ch = Characters[*c];
-
-		float xpos = x + ch.Bearing.x * scale;
-		float ypos = y - (ch.Size.y - ch.Bearing.y) * scale;
-
-		float w = ch.Size.x * scale;
-		float h = ch.Size.y * scale;
-		// update VBO for each character
-		glm::mat4 model = glm::mat4(1.f);
-		model = glm::translate(model, glm::vec3(xpos, ypos, 0.f));
-		model = glm::scale(model, glm::vec3(w, h, 1.f));
-		model = glm::translate(model, glm::vec3(0.5f, 0.5f, 0.f));
-
-		glm::mat4 mvp = *vp * model;
-		glUniformMatrix4fv(s.transformLoc, 1, GL_FALSE, glm::value_ptr(mvp));
-
-		// render glyph texture over quad
-		glBindTexture(GL_TEXTURE_2D, ch.TextureID);
-
-		// render quad
-		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-		// now advance cursors for next glyph (note that advance is number of 1/64 pixels)
-		x += (ch.Advance >> 6) * scale; // bitshift by 6 to get value in pixels (2^6 = 64)
-	}
-	glBindVertexArray(0);
-	glBindTexture(GL_TEXTURE_2D, 0);
-}
-bool lineIntersection(Point p0, Point p1, Point p2, Point p3, Point* intersection) {
-	Point s1, s2;
-	s1.x = p1.x - p0.x;     s1.y = p1.y - p0.y;
-	s2.x = p3.x - p2.x;     s2.y = p3.y - p2.y;
-
-	float s = (-s1.y * (p0.x - p2.x) + s1.x * (p0.y - p2.y)) / (-s2.x * s1.y + s1.x * s2.y);
-	float t = ( s2.x * (p0.y - p2.y) - s2.y * (p0.x - p2.x)) / (-s2.x * s1.y + s1.x * s2.y);
-
-	if (s >= 0.f && s <= 1.f && t >= 0.f && t <= 1.f) {
-		// Collision detected
-		intersection->x = p0.x + (t * s1.x);
-		intersection->y = p0.y + (t * s1.y);
-		return true;
-	}
-
-	return false; // No collision
-}
-void splitPolygon(Sprite* sprite, int* selectedPolygon, Point p1, Point p2) {
-	vector<Point> polygonPoints;
-	vector<int> isIntersectionPoints; // 0 normal 1 entry 2 exit
+void splitPolygon(Sprite* sprite, int* selectedPolygon, Vec2f l1, Vec2f l2) {
+	std::vector<Vec2f> polygonPoints;
+	std::vector<uint8_t> isIntersectionPoints; // 0 normal 1 entry 2 exit
 	bool isEntryPoint = true;
 	int intersections = 0;
 	for (unsigned int i = 0; i < sprite->polygons.at(*selectedPolygon).points.size(); i++) {
 		polygonPoints.push_back(sprite->polygons.at(*selectedPolygon).points.at(i));
 		isIntersectionPoints.push_back(0);
-		Point intersection;
+		Vec2f intersection;
 		unsigned int second = (i + 1) % sprite->polygons.at(*selectedPolygon).points.size();
-		if (lineIntersection(sprite->polygons.at(*selectedPolygon).points.at(i), sprite->polygons.at(*selectedPolygon).points.at(second), p1, p2, &intersection)) {
+		if (lineIntersection(sprite->polygons.at(*selectedPolygon).points.at(i), sprite->polygons.at(*selectedPolygon).points.at(second), l1, l2, &intersection)) {
 			polygonPoints.push_back(intersection);
 			isIntersectionPoints.push_back(isEntryPoint ? 1 : 2);
 			isEntryPoint = !isEntryPoint;
@@ -595,7 +442,7 @@ void splitPolygon(Sprite* sprite, int* selectedPolygon, Point p1, Point p2) {
 		if (!isIntersectionPoints.at(j)) continue;
 		bool isSubPoly = true;
 		Polygon* poly = &sprite->polygons.at(*selectedPolygon);
-		sprite->polygons.push_back({{}, poly->isCustomHitSound, poly->hitSound, poly->customHitSound, poly->frictionIndex});
+		sprite->polygons.push_back({{}, poly->hitSound, poly->isCustomHitSound, poly->customHitSoundName, poly->frictionAssetPath});
 		for (unsigned int i = 0; i < polygonPoints.size(); i++) {
 			bool oldIsSubPoly = isSubPoly;
 			if (isIntersectionPoints.at((i + j) % isIntersectionPoints.size()) != 0 && !oldIsSubPoly) isSubPoly = true;
@@ -618,7 +465,7 @@ int main(void) {
 	//init glfw
 	GLFWwindow* window = glfwCreateWindow(frameWidth, frameHeight, "Collider Workshop V2", NULL, NULL);
 	if (window == NULL) {
-		cout << "[ERROR] Failed to create GLFW window" << endl;
+		std::cout << "[ERROR] Failed to create GLFW window" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
@@ -626,7 +473,7 @@ int main(void) {
 
 	// init glad
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		cout << "[ERROR] Failed to initialize glad" << endl;
+		std::cout << "[ERROR] Failed to initialize glad" << std::endl;
 		return -1;
 	}
 
@@ -646,14 +493,12 @@ int main(void) {
 
 	SpriteShader spriteShader{"vertex.vsh", "fragment.fsh"};
 	LineShader lineShader{"vertex.vsh", "line.fsh"};
-	GlyphShader glyphShader{"vertex.vsh", "glyph.fsh"};
-	shared_ptr<Texture> buttonTex = getTexture("button.png");
-	vector<Sprite*> sprites = {};
+	std::vector<Sprite*> sprites = {};
 
 	
-	vector<string> customHitSoundNames = {};
-	vector<string> frictionPaths = {};
-	vector<string> frictionNames = {};
+	std::vector<std::string> customHitSoundNames = {};
+	std::vector<std::string> frictionPaths = {};
+	std::vector<std::string> frictionNames = {};
 
 	// init render stuff ===========
 
@@ -677,60 +522,6 @@ int main(void) {
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-	// init freetype
-	FT_Library ft;
-	if (FT_Init_FreeType(&ft)) {
-		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-		return -1;
-	}
-
-	FT_Face face;
-	if (FT_New_Face(ft, "./DMSans-VariableFont.ttf", 0, &face)) {
-		std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
-		return -1;
-	}
-	FT_Set_Pixel_Sizes(face, 0, 48);
-	if (FT_Load_Char(face, 'X', FT_LOAD_RENDER)) {
-		std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
-		return -1;
-	}
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // disable byte-alignment restriction
-
-	for (unsigned char c = 32; c < 128; c++) {
-		// load character glyph
-		if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
-			continue;
-		}
-		// generate texture
-		unsigned int texture;
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RED,
-			face->glyph->bitmap.width,
-			face->glyph->bitmap.rows,
-			0,
-			GL_RED,
-			GL_UNSIGNED_BYTE,
-			face->glyph->bitmap.buffer
-		);
-		// set texture options
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		// now store character for later use
-		Character character = {
-			texture,
-			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
-			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-			(unsigned int)face->glyph->advance.x
-		};
-		Characters.insert(std::pair<char, Character>(c, character));
-	}
 
 	// wait until file is dropped =====================
 	while (!isPathLoaded && !glfwWindowShouldClose(window)) {
@@ -740,22 +531,21 @@ int main(void) {
 		float aspect = (float)frameWidth / (float)frameHeight;
 		glm::mat4 screenSpaceProj = glm::ortho(-aspect, aspect, -1.f, 1.f);
 		// render text
-		renderText(glyphShader, "Drag colliders.txt into window", 0.f, 0.f, 0.001f, glm::vec4(1.f, 1.f, 1.f, 1.f), VAO, &screenSpaceProj);
 
 
 		// final stuff
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
-	string colliderFileText;
-	string diasd = pathToLoad;
+	std::string colliderFileText;
+	std::string diasd = pathToLoad;
 	if (!glfwWindowShouldClose(window) && readFileText(pathToLoad, &colliderFileText)) {
-		istringstream iss(colliderFileText);
+		std::istringstream iss(colliderFileText);
 
 		int linemode = 0;
 		int howmanycustomnamesleft;
 		int howmanyfrictionpathsleft;
-		string objectName, spriteFileName;
+		std::string objectName, spriteFileName;
 		// 0: howmanycustomnames, 1: custom names, 2: howmanyfrictionpaths, 3: friction names, 4: object name, 5: sprite path, 6: sprite bounds
 		for (std::string line; std::getline(iss, line);) {
 			switch (linemode) {
@@ -793,8 +583,8 @@ int main(void) {
 					break;
 				}
 				case 6:{ // sprite bounds
-					stringstream boundsStringStream{line};
-					string boundNumberString;
+					std::stringstream boundsStringStream{line};
+					std::string boundNumberString;
 					vector<float> boundNumbers = {};
 					while (getline(boundsStringStream, boundNumberString, ',')) {
 						boundNumbers.push_back(stof(boundNumberString));
@@ -828,8 +618,8 @@ int main(void) {
 		float moveCameraStartWorldMouseY = 0.f;
 		bool isMovingCamera = false;
 
-		Point polygonSplitStart;
-		Point polygonSplitEnd;
+		Vec2f polygonSplitStart;
+		Vec2f polygonSplitEnd;
 		bool isDrawingSplitLine = false;
 
 
@@ -837,8 +627,8 @@ int main(void) {
 		while (!glfwWindowShouldClose(window)) {
 			float aspect = (float)frameWidth / (float)frameHeight;
 
-			zoom /= pow(1.1, yScroll);
-			zoom = min(max(zoom, 0.1f), 300.f);
+			zoom /= std::pow(1.1, yScroll);
+			zoom = std::min(std::max(zoom, 0.1f), 300.f);
 
 			yScroll = 0.;
 
@@ -946,28 +736,6 @@ int main(void) {
 					poly->points.erase(poly->points.begin() + realMod(lowestIndex + 1, poly->points.size()));
 				}
 
-				// planar decimation
-
-				int homwan = poly->points.size();
-				for (int iteration = 0; iteration < homwan; iteration++) {
-					poly = &sprites[currentSprite]->polygons.at(0);
-					// find lowest angle
-					float lowestAngle = 0.f;
-					float lowestIndex = -1;
-					for (int i = poly->points.size() - 1; i >= 0; i--) {
-						Point p1 = poly->points.at(i);
-						Point p2 = poly->points.at(realMod(i - 1, poly->points.size()));
-						Point p3 = poly->points.at(realMod(i + 1, poly->points.size()));
-						float angle = getAbsAngleFromThreePoints(p1, p2, p3);
-						float minAngle = glm::radians(6.f / distance(p2, p3)); // lower number is high poly, old: 3
-						if ((lowestIndex == -1 || angle < lowestAngle) && angle < minAngle) {
-							lowestIndex = i;
-							lowestAngle = angle;
-						}
-					}
-					if (lowestIndex == -1) break;
-					poly->points.erase(poly->points.begin() + lowestIndex);
-				}
 
 				gPressed = false;
 			}
@@ -980,13 +748,13 @@ int main(void) {
 				float x1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(j).x;
 				float y1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(j).y;
 
-				float dist = sqrt(square(worldMouseX - x1) + square(worldMouseY - y1));
+				float dist = sqrt((worldMouseX - x1) * (worldMouseX - x1) + (worldMouseY - y1) * (worldMouseY - y1));
 				if (dist < closestDistance || closestPoint == -1) {
 					closestDistance = dist;
 					closestPoint = j;
 				}
 			}
-			if (!spaceDown && closestPoint != -1 && max(abs(sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint).x - worldMouseX), abs(sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint).y - worldMouseY)) < 0.2f * scale) {
+			if (!spaceDown && closestPoint != -1 && std::max(std::abs(sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint).x - worldMouseX), std::abs(sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint).y - worldMouseY)) < 0.2f * scale) {
 				if (didMousePress) {
 					if (ctrlKeyDown && polygonPoints > 3) {
 						sprites[currentSprite]->polygons.at(selectedPolygon).points.erase(sprites[currentSprite]->polygons.at(selectedPolygon).points.begin() + closestPoint);
@@ -1004,13 +772,11 @@ int main(void) {
 			int closestLine = -1;
 			float closestLineDistance = 0.f;
 			for (int j = 0; j < polygonPoints; j++) {
-				float x1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(j).x;
-				float y1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(j).y;
-				float x2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((j + 1) % polygonPoints).x;
-				float y2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((j + 1) % polygonPoints).y;
+				Vec2f p1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(j);
+				Vec2f p2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((j + 1) % polygonPoints);
 
-				float dist = distanceFromPointToLine(worldMouseX, worldMouseY, x1, y1, x2, y2);
-				float progress = getPointProgressAlongLine(worldMouseX, worldMouseY, x1, y1, x2, y2);
+				float dist = distanceFromPointToLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
+				float progress = getPointProgressAlongLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
 				if ((dist < closestLineDistance || closestLine == -1) && progress >= 0.f && progress <= 1.f) {
 					closestLineDistance = dist;
 					closestLine = j;
@@ -1019,14 +785,11 @@ int main(void) {
 			// add point if press on line
 			if (!spaceDown && !ctrlKeyDown && closestLine != -1 && closestLineDistance < 0.2f * scale && closestPoint == -1 && draggingPoint == -1) {
 				if (didMousePress) {
-					float x1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).x;
-					float y1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).y;
-					float x2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints).x;
-					float y2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints).y;
-					float progress = getPointProgressAlongLine(worldMouseX, worldMouseY, x1, y1, x2, y2);
-					float ecks = lerp(x1, x2, progress);
-					float why = lerp(y1, y2, progress);
-					sprites[currentSprite]->polygons.at(selectedPolygon).points.insert(sprites[currentSprite]->polygons.at(selectedPolygon).points.begin() + closestLine + 1, {ecks, why});
+					Vec2f p1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine);
+					Vec2f p2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints).;
+					float progress = getPointProgressAlongLine(Vec2f::(worldMouseX, worldMouseY), p1, p2);
+					Vec2f pointOnLine = Vec2f::lerp(p1, p2, progress);
+					sprites[currentSprite]->polygons.at(selectedPolygon).points.insert(sprites[currentSprite]->polygons.at(selectedPolygon).points.begin() + closestLine + 1, pointOnLine);
 					closestPoint = closestLine + 1;
 					draggingPoint = closestLine + 1;
 					closestLine = -1;
@@ -1041,7 +804,7 @@ int main(void) {
 					int howManyIntersections = 0;
 					int polygonPoints = sprites[currentSprite]->polygons.at(i).points.size();
 					for (int j = 0; j < polygonPoints; j++) {
-						Point intersection;
+						Vec2f intersection;
 						if (lineIntersection(
 							sprites[currentSprite]->polygons.at(i).points.at(j),
 							sprites[currentSprite]->polygons.at(i).points.at((j + 1) % polygonPoints),
@@ -1072,28 +835,6 @@ int main(void) {
 			}
 
 			if (sPressed && ctrlKeyDown) {
-				ofstream file;
-				filesystem::path collidersForUnityPath = pathToLoad;
-				collidersForUnityPath = collidersForUnityPath.parent_path() / "colliders_for_unity.txt";
-				file.open(collidersForUnityPath);
-				for (Sprite* s : sprites) {
-					file << s->objectName << "\n";
-					for (Polygon& poly : s->polygons) {
-						file << "polygon\n";
-						file << poly.isCustomHitSound << "\n";
-						if (poly.isCustomHitSound) {
-							file << poly.customHitSound << "\n";
-						} else {
-							file << (int)poly.hitSound << "\n";
-						}
-						file << frictionPaths.at(poly.frictionIndex) << "\n";
-						for (Point& p : poly.points) {
-							file << p.x << "x" << p.y << "y";
-						}
-						file << "\n";
-					}
-				}
-				file.close();
 			}
 			sPressed = false;
 
@@ -1123,16 +864,15 @@ int main(void) {
 				float averageY = 0.f;
 				int polygonPoints = poly->points.size();
 				for (int j = 0; j < polygonPoints; j++) {
-					float x1 = poly->points.at(j).x;
-					float y1 = poly->points.at(j).y;
-					averageX += x1;
-					averageY += y1;
-					float x2 = poly->points.at((j + 1) % polygonPoints).x;
-					float y2 = poly->points.at((j + 1) % polygonPoints).y;
+					Vec2f p1 = poly->points.at(j);
+					Vec2f p2 = poly->points.at((j + 1) % polygonPoints);
+
+					averageX += p1.x;
+					averageY += p1.y;
 					glm::mat4 model = glm::mat4(1.f);
-					model = glm::translate(model, glm::vec3((x1 + x2) / 2.f, (y1 + y2) / 2.f, 0.f));
-					model = glm::rotate(model, atan((x2 - x1) / (y2 - y1)), glm::vec3(0.f, 0.f, -1.f));
-					float length = sqrt(square(x2 - x1) + square(y2 - y1));
+					model = glm::translate(model, glm::vec3((p1.x + p2.x) / 2.f, (p1.y + p2.y) / 2.f, 0.f));
+					model = glm::rotate(model, atan((p2.x - p1.x) / (p2.y - p1.y)), glm::vec3(0.f, 0.f, -1.f));
+					float length = Vec2f::distance(p1, p2);
 					model = glm::scale(model, glm::vec3(0.05f * scale, length, 1.f));
 
 					glm::mat4 trans = proj * model;
@@ -1147,7 +887,7 @@ int main(void) {
 					// point
 
 					model = glm::mat4(1.f);
-					model = glm::translate(model, glm::vec3(x1, y1, 0.f));
+					model = glm::translate(model, glm::vec3(p1.x, p1.y, 0.f));
 					model = glm::scale(model, glm::vec3(0.1f * scale, 0.1f * scale, 1.f));
 
 					trans = proj * model;
@@ -1162,9 +902,6 @@ int main(void) {
 				}
 				averageX /= (float)poly->points.size();
 				averageY /= (float)poly->points.size();
-
-				renderText(glyphShader, poly->isCustomHitSound ? poly->customHitSound : hitSoundNames[poly->hitSound], averageX, averageY, 0.005f, glm::vec4(1.f, 1.f, 1.f, i == selectedPolygon ? 1.f : 1.f), VAO, &proj);
-				renderText(glyphShader, frictionNames.at(poly->frictionIndex), averageX, averageY - 0.2f, 0.005f, glm::vec4(1.f, 1.f, 1.f, i == selectedPolygon ? 1.f : 1.f), VAO, &proj);
 			}
 
 			// split line
@@ -1172,7 +909,7 @@ int main(void) {
 				glm::mat4 model = glm::mat4(1.f);
 				model = glm::translate(model, glm::vec3((polygonSplitStart.x + polygonSplitEnd.x) / 2.f, (polygonSplitStart.y + polygonSplitEnd.y) / 2.f, 0.f));
 				model = glm::rotate(model, atan((polygonSplitEnd.x - polygonSplitStart.x) / (polygonSplitEnd.y - polygonSplitStart.y)), glm::vec3(0.f, 0.f, -1.f));
-				float length = sqrt(square(polygonSplitEnd.x - polygonSplitStart.x) + square(polygonSplitEnd.y - polygonSplitStart.y));
+				float length = Vec2f::distance(polygonSplitStart, polygonSplitEnd);
 				model = glm::scale(model, glm::vec3(0.05f * scale, length, 1.f));
 
 				glm::mat4 trans = proj * model;
@@ -1186,16 +923,13 @@ int main(void) {
 			// point on line
 
 			if (closestLine != -1) {
-				float x1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).x;
-				float y1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine).y;
-				float x2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints).x;
-				float y2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints).y;
-				float progress = getPointProgressAlongLine(worldMouseX, worldMouseY, x1, y1, x2, y2);
-				float ecks = lerp(x1, x2, progress);
-				float why = lerp(y1, y2, progress);
+				Vec2f p1 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestLine);
+				Vec2f p2 = sprites[currentSprite]->polygons.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints);
+				float progress = getPointProgressAlongLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
+				Vec2f pointOnLine = Vec2f::lerp(p1, p2, progrees);
 
 				model = glm::mat4(1.f);
-				model = glm::translate(model, glm::vec3(ecks, why, 0.f));
+				model = glm::translate(model, glm::vec3(pointOnLine.x, pointOnLine.y, 0.f));
 				model = glm::scale(model, glm::vec3(0.1f * scale, 0.1f * scale, 1.f));
 
 				trans = proj * model;
@@ -1209,13 +943,13 @@ int main(void) {
 
 
 			int howManyPoints = sprites[currentSprite]->polygons.at(selectedPolygon).points.size();
-			string howManyPointsString = "Points: " + to_string(howManyPoints);
+			std::string howManyPointsString = "Points: " + std::to_string(howManyPoints);
 
-			string currentPolygonString = "Polygon " + to_string(selectedPolygon + 1) + "/" + to_string(sprites[currentSprite]->polygons.size());
-			string currentSpriteString = "Sprite " + to_string(currentSprite + 1) + "/" + to_string(sprites.size());
+			std::string currentPolygonString = "Polygon " + std::to_string(selectedPolygon + 1) + "/" + to_string(sprites[currentSprite]->polygons.size());
+			std::string currentSpriteString = "Sprite " + std::to_string(currentSprite + 1) + "/" + to_string(sprites.size());
 			if (closestPoint != -1) {
-				Point closest = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint);
-				string currentPointString = "Point " + to_string(closestPoint) + "(" + to_string(closest.x) + ", " + to_string(closest.y) + ")";
+				Vec2f closest = sprites[currentSprite]->polygons.at(selectedPolygon).points.at(closestPoint);
+				std::string currentPointString = "Point " + to_string(closestPoint) + "(" + to_string(closest.x) + ", " + to_string(closest.y) + ")";
 				renderText(glyphShader, currentPointString, 0.f, 0.75f, 0.001f, glm::vec4(1.f, 1.f, 1.f, 1.f), VAO, &screenSpaceProj);
 			}
 
@@ -1296,8 +1030,6 @@ int main(void) {
 		}
 	} // after dragged file into window
 	glfwTerminate();
-	FT_Done_Face(face);
-	FT_Done_FreeType(ft);
 
 	return 0;
 }
