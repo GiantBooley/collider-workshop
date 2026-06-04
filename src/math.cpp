@@ -1,9 +1,13 @@
 
 #include "math.hpp"
 
+int realMod(int a, int b) {
+	if (a >= 0) return a % b; else return (b >= 0 ? b : -b) - 1 + (a + 1) % b;
+}
+
 // Vec2f
 Vec2f::Vec2f() : x(0.f), y(0.f) {}
-Vec2f::Vec2f(float x2, float y2) : x(x2), y(y2) {}
+Vec2f::Vec2f(float x_, float y_) : x(x_), y(y_) {}
 
 float Vec2f::distance(Vec2f p1, Vec2f p2) {
 	return std::sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));
@@ -45,6 +49,32 @@ bool lineIntersection(Vec2f p0, Vec2f p1, Vec2f p2, Vec2f p3, Vec2f* intersectio
 	return false;
 }
 
+// Vec3f
+Vec3f::Vec3f() : x(0.f), y(0.f), z(0.f) {}
+Vec3f::Vec3f(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+
+// Rect
+Rect::Rect(float minX_, float minY_, float maxX_, float maxY_) : minX(minX_), minY(minY_), maxX(maxX_), maxY(maxY_) {}
+
+float Rect::getWidth() const {
+	return maxX - minX;
+}
+float Rect::getHeight() const {
+	return maxY - minY;
+}
+
 // Vec2i
-/*Vec2i::Vec2i() : x(0), y(0) {}
-Vec2i::Vec2i(int x2, int y2) : x(x2), y(y2) {}*/
+Vec2i::Vec2i() : x(0), y(0) {}
+Vec2i::Vec2i(int x_, int y_) : x(x_), y(y_) {}
+Vec2i Vec2i::operator+(const Vec2i& other) const {
+	return Vec2i(x + other.x, y + other.y);
+}
+Vec2i Vec2i::operator-(const Vec2i& other) const {
+	return Vec2i(x - other.x, y - other.y);
+}
+Vec2i Vec2i::operator+(const float& other) const {
+	return Vec2i(x + other, y + other);
+}
+Vec2i Vec2i::operator-(const float& other) const {
+	return Vec2i(x - other, y - other);
+}

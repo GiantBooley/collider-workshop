@@ -6,14 +6,13 @@
 #include <iostream>
 #include <memory>
 #include <vector>
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb/stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb/stb_image_write.h"
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+
+#include "stb/stb_image.h"
+#include "stb/stb_image_write.h"
 
 template <typename T>
 ImageData<T>::ImageData(T wv) : whiteValue(wv), width(0), height(0), colch(0), filePath("") {}

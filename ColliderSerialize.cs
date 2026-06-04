@@ -13,8 +13,12 @@ public class ColliderSerialize : MonoBehaviour {
     }
     [System.Serializable]
     private class CWSprite {
-        public string texturePath;
         public string objectPath;
+        public string texturePath;
+        public float rectMinX;
+        public float rectMinY;
+        public float rectMaxX;
+        public float rectMaxY;
         public float posX;
         public float posY;
         public float posZ;
@@ -25,11 +29,7 @@ public class ColliderSerialize : MonoBehaviour {
         public float scaY;
         public float scaZ;
         public float pixelsPerUnit;
-        public int zIndex;
-        public float rectMinX;
-        public float rectMinY;
-        public float rectMaxX;
-        public float rectMaxY;
+        public int sortingOrder;
         public List<CWCollider> colliders;
     }
     [System.Serializable]
@@ -103,8 +103,12 @@ public class ColliderSerialize : MonoBehaviour {
 
             string texturePath = RemoveAssetsFromPath(AssetDatabase.GetAssetPath(spriteRenderer.sprite.texture));
             CWSprite sprite = new CWSprite{
-                texturePath = texturePath,
                 objectPath = GetGameObjectPath(spriteRenderer.gameObject),
+                texturePath = texturePath,
+                rectMinX = spriteRenderer.sprite.rect.xMin,
+                rectMinY = spriteRenderer.sprite.rect.yMin,
+                rectMaxX = spriteRenderer.sprite.rect.xMax,
+                rectMaxY = spriteRenderer.sprite.rect.yMax,
                 posX = spriteRenderer.gameObject.transform.position.x,
                 posY = spriteRenderer.gameObject.transform.position.y,
                 posZ = spriteRenderer.gameObject.transform.position.z,
@@ -115,11 +119,7 @@ public class ColliderSerialize : MonoBehaviour {
                 scaY = spriteRenderer.gameObject.transform.lossyScale.y,
                 scaZ = spriteRenderer.gameObject.transform.lossyScale.z,
                 pixelsPerUnit = spriteRenderer.sprite.pixelsPerUnit,
-                zIndex = spriteRenderer.sortingOrder,
-                rectMinX = spriteRenderer.sprite.rect.xMin,
-                rectMinY = spriteRenderer.sprite.rect.yMin,
-                rectMaxX = spriteRenderer.sprite.rect.xMax,
-                rectMaxY = spriteRenderer.sprite.rect.yMax
+                sortingOrder = spriteRenderer.sortingOrder
             };
             sprites.Add(sprite);
         }
@@ -137,6 +137,6 @@ public class ColliderSerialize : MonoBehaviour {
         writer.WriteLine(serial);
         writer.Close();
         AssetDatabase.Refresh();
-        Debug.Log("Saved collider workshop file");
+        Debug.Log($"Saved collider workshop file: {sprites.Count} sprites");
     }
 }
