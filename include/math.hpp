@@ -4,6 +4,7 @@
 #include <cmath>
 
 int realMod(int a, int b);
+float mapRange(float value, float oldMin, float oldMax, float newMin, float newMax);
 
 class Vec2f {
 public:
@@ -14,6 +15,11 @@ public:
 	static float distance(Vec2f p1, Vec2f p2);
 	static float dot(Vec2f v1, Vec2f v2);
 	static Vec2f lerp(Vec2f p1, Vec2f p2, float t);
+
+	Vec2f operator+(const Vec2f& other) const;
+	Vec2f operator-(const Vec2f& other) const;
+	Vec2f operator+(const float& other) const;
+	Vec2f operator-(const float& other) const;
 };
 float getAbsAngleFromThreePoints(Vec2f p1, Vec2f p2, Vec2f p3);
 float distanceFromPointToLine(Vec2f point, Vec2f l1, Vec2f l2);
@@ -47,8 +53,8 @@ public:
 
 	Vec2i operator+(const Vec2i& other) const;
 	Vec2i operator-(const Vec2i& other) const;
-	Vec2i operator+(const float& other) const;
-	Vec2i operator-(const float& other) const;
+	Vec2i operator+(const int& other) const;
+	Vec2i operator-(const int& other) const;
 };
 
 #endif

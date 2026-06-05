@@ -275,7 +275,7 @@ void splitPolygon(std::unique_ptr<Sprite>& sprite, int* selectedPolygon, Vec2f l
 		if (!isIntersectionPoints.at(j)) continue;
 		bool isSubPoly = true;
 		Collider* poly = &sprite->colliders.at(*selectedPolygon);
-		sprite->colliders.push_back({{}, poly->soundMaterial, poly->isCustomHitSound, poly->customHitSoundName, poly->physicsMaterial2DAssetPath});
+		sprite->colliders.push_back({{}, poly->physicsMaterialAssetPath, poly->soundMaterial, poly->isCustomHitSound, poly->customHitSoundName, 128, 128, 128});
 		for (unsigned int i = 0; i < polygonPoints.size(); i++) {
 			bool oldIsSubPoly = isSubPoly;
 			if (isIntersectionPoints.at((i + j) % isIntersectionPoints.size()) != 0 && !oldIsSubPoly) isSubPoly = true;
@@ -325,7 +325,7 @@ int main(void) {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	GLFWwindow* window = glfwCreateWindow(frameWidth, frameHeight, "Collider Workshop V2", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(frameWidth, frameHeight, "Collider Workshop V3", NULL, NULL);
 	if (window == NULL) {
 		std::cout << "[ERROR] Failed to create GLFW window" << std::endl;
 		glfwTerminate();
@@ -340,8 +340,6 @@ int main(void) {
 	}
 
 	// window hints
-	glfwWindowHint(GLFW_SAMPLES, 4);
-	glEnable(GL_MULTISAMPLE);
 
 	// init imgui ==========
 	IMGUI_CHECKVERSION();
@@ -357,6 +355,11 @@ int main(void) {
 	glfwSetMouseButtonCallback(window, mouse_button_callback   );
 	glfwSetDropCallback       (window, drop_callback           );
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+	// create cursors ===========
+	GLFWcursor* arrowCursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+	GLFWcursor* handCursor  = glfwCreateStandardCursor(GLFW_HAND_CURSOR );
+
 	// stuff ==========
 	glViewport(0, 0, frameWidth, frameHeight);
 	glEnable(GL_BLEND);
@@ -367,10 +370,6 @@ int main(void) {
 	LineShader lineShader{"vertex.vsh", "line.fsh"};
 	CircleShader circleShader{"vertex.vsh", "circle.fsh"};
 
-	
-	std::vector<std::string> customHitSoundNames = {};
-	std::vector<std::string> frictionPaths = {};
-	std::vector<std::string> frictionNames = {};
 
 	// init render stuff ===========
 
@@ -395,17 +394,18 @@ int main(void) {
 	glEnableVertexAttribArray(1);
 
 
+	float clearColor[3] = {0.22f, 0.18f, 0.2f};
 	// wait until file is dropped =====================
 	while (!isPathLoaded && !glfwWindowShouldClose(window)) {
-		glClearColor(0.4f, 0.4f, 0.4f, 1.f);
+		glClearColor(clearColor[0], clearColor[1], clearColor[2], 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		if (ImGui::Begin("Sprite light")) {
-			ImGui::Text("Drag spritelight.json into window");
+		if (ImGui::Begin("Collider workshop")) {
+			ImGui::Text("Drag colliderworkshop.json into window");
 		}
 		ImGui::End();
 		ImGui::Render();
@@ -416,15 +416,15 @@ int main(void) {
 		glfwPollEvents();
 	}
 
-	std::string colliderFileText;
-	if (!glfwWindowShouldClose(window) && readFileText(pathToLoad, &colliderFileText)) {
+	std::ifstream jsonFileStream(pathToLoad);
+	if (!glfwWindowShouldClose(window) && jsonFileStream.is_open()) {
 
-		// load json file and sprites ============
-		json colliderFileJson = json::parse(colliderFileText);
+		// load json file and sprites =========================
+		json colliderFileJson = json::parse(jsonFileStream);
 
-		std::filesystem::path projectPath = colliderFileJson.at("projectPath").get<std::string>();
+		std::filesystem::path projectAssetsPath = colliderFileJson.at("projectAssetsPath").get<std::string>();
 
-		std::vector<std::unique_ptr<Sprite>> sprites = {};
+		std::vector<std::unique_ptr<Sprite>> sprites;
 		sprites.reserve(colliderFileJson.at("sprites").size());
 		for (const auto& el : colliderFileJson.at("sprites")) {
 			sprites.push_back(std::make_unique<Sprite>(
@@ -461,7 +461,7 @@ int main(void) {
 
 		int textureLoadIndex = 0;
 		for (std::unique_ptr<Sprite>& sprite : sprites) {
-			std::string imagePath = (projectPath / sprite->texturePath).string();
+			std::string imagePath = (projectAssetsPath / sprite->texturePath).string();
 
 			if (loadedImages.contains(imagePath)) {
 				sprite->image = loadedImages.at(imagePath);
@@ -476,30 +476,70 @@ int main(void) {
 				std::cout << "Loaded sprite image " << (textureLoadIndex + 1) << "/" << sprites.size() << ": " << sprite->texturePath << ", " << imageData->getWidth() << "x" << imageData->getHeight() << ", (" << sprite->rect.minX << ", " << sprite->rect.minY << ") to (" << sprite->rect.maxX << ", " << sprite->rect.maxY << ")" << std::endl;
 			}
 
-
 			textureLoadIndex++;
 		}
 
+		// load physics materials
+		std::unordered_map<std::string, PhysicsMaterial2D> physicsMaterials;
+		for (const auto& el : colliderFileJson.at("physicsMaterials")) {
+			std::string assetPath = el.at("assetPath").get<std::string>();
+			physicsMaterials.insert_or_assign(assetPath, PhysicsMaterial2D(el.at("friction").get<float>(), el.at("bounciness").get<float>(), assetPath));
+		}
+
+		// load custom hit sounds
+		std::vector<std::string> customHitSounds;
+		for (const auto& el : colliderFileJson.at("customHitSounds")) {
+			customHitSounds.push_back(el.at("name").get<std::string>());
+		}
+
 		int currentSprite = 0;
+		int selectedPolygon = 0;
+		int draggingPoint = -1;
+		Vec2f draggingPointScreenOffsetFromMouse;
+		Vec2f polygonSplitStart;
+		Vec2f polygonSplitEnd;
+		bool isDrawingSplitLine = false;
 
 		float worldMouseX = 0.f;
 		float worldMouseY = 0.f;
 
-		int selectedPolygon = 0;
-		int draggingPoint = -1;
-
 		int frameCount = 0;
 		int fps = 0;
 		double lastFrameTime = glfwGetTime();
+
+		// camera
 		Rect viewBounds{0.f, 0.f, 10.f, 10.f * (static_cast<float>(frameHeight) / static_cast<float>(frameWidth))};
 		float moveCameraStartWorldMouseX = 0.f;
 		float moveCameraStartWorldMouseY = 0.f;
 		bool isMovingCamera = false;
 
-		Vec2f polygonSplitStart;
-		Vec2f polygonSplitEnd;
-		bool isDrawingSplitLine = false;
+		// settings
+		int colliderSmoothSteps = 1;
+		float colliderAlphaThreshold = 0.5f;
+		float douglasPeuckerEpsilon = 1.5f;
 
+		float pointRadius = 4.f;
+		float lineWidth = 1.5f;
+		float pointSelectRadius = 16.f;
+		float lineSelectDistance = 10.f;
+
+		std::string defaultPhysicsMaterialAssetPath = "";
+		SoundMaterial defaultSoundMaterial = SoundMaterial::rock;
+		bool defaultIsCustomHitSound = false;
+		std::string defaultCustomHitSoundName = "";
+
+		auto worldToScreen = [&](Vec2f v) -> Vec2f {
+			return Vec2f(
+				mapRange(v.x, viewBounds.minX, viewBounds.maxX, 0.f, static_cast<float>(frameWidth)),
+				mapRange(v.y, viewBounds.maxY, viewBounds.minY, 0.f, static_cast<float>(frameHeight))
+			);
+		};
+		auto screenToWorld = [&](Vec2f v) -> Vec2f {
+			return Vec2f(
+				mapRange(v.x, 0.f, static_cast<float>(frameWidth) , viewBounds.minX, viewBounds.maxX),
+				mapRange(v.y, 0.f, static_cast<float>(frameHeight), viewBounds.maxY, viewBounds.minY)
+			);
+		};
 
 		//llooop
 		while (!glfwWindowShouldClose(window)) {
@@ -511,26 +551,19 @@ int main(void) {
 
 			float aspect = (float)frameWidth / (float)frameHeight;
 
+			// ========== camera movement ===============
+			float correctedViewHeight = viewBounds.getWidth() / aspect;
+			float currentViewCenterY = (viewBounds.minY + viewBounds.maxY) * 0.5f;
+			viewBounds.minY = currentViewCenterY - correctedViewHeight * 0.5f;
+			viewBounds.maxY = currentViewCenterY + correctedViewHeight * 0.5f;
+			worldMouseX = std::lerp(viewBounds.minX, viewBounds.maxX, mouseX / (float)frameWidth);
+			worldMouseY = std::lerp(viewBounds.minY, viewBounds.maxY, 1.f - mouseY / (float)frameHeight);
 			if (!io.WantCaptureMouse) {
-				// ========== camera movement ===============
-				float correctedViewHeight = viewBounds.getWidth() / aspect;
-				float currentViewCenterY = (viewBounds.minY + viewBounds.maxY) * 0.5f;
-				viewBounds.minY = currentViewCenterY - correctedViewHeight * 0.5f;
-				viewBounds.maxY = currentViewCenterY + correctedViewHeight * 0.5f;
-				worldMouseX = std::lerp(viewBounds.minX, viewBounds.maxX, mouseX / (float)frameWidth);
-				worldMouseY = std::lerp(viewBounds.minY, viewBounds.maxY, 1.f - mouseY / (float)frameHeight);
+				// press middle button to start moving
 				if (didMiddlePress) {
 					isMovingCamera = true;
 					moveCameraStartWorldMouseX = worldMouseX;
 					moveCameraStartWorldMouseY = worldMouseY;
-				}
-
-				if (isMovingCamera) {
-					// move from worldmousex, to startworldmousex
-					viewBounds.minX += moveCameraStartWorldMouseX - worldMouseX;
-					viewBounds.maxX += moveCameraStartWorldMouseX - worldMouseX;
-					viewBounds.minY += moveCameraStartWorldMouseY - worldMouseY;
-					viewBounds.maxY += moveCameraStartWorldMouseY - worldMouseY;
 				}
 				// zoom camera
 				float zoomScale = std::powf(1.1f, static_cast<float>(-yScroll));
@@ -540,13 +573,20 @@ int main(void) {
 				viewBounds.minY = std::lerp(worldMouseY, viewBounds.minY, zoomScale);
 				viewBounds.maxY = std::lerp(worldMouseY, viewBounds.maxY, zoomScale);
 			}
+			if (isMovingCamera) {
+				// move from worldmousex, to startworldmousex
+				viewBounds.minX += moveCameraStartWorldMouseX - worldMouseX;
+				viewBounds.maxX += moveCameraStartWorldMouseX - worldMouseX;
+				viewBounds.minY += moveCameraStartWorldMouseY - worldMouseY;
+				viewBounds.maxY += moveCameraStartWorldMouseY - worldMouseY;
+			}
 			// releases
 			if (didMiddleRelease) isMovingCamera = false;
 			didMiddleRelease = false;
 			didMiddlePress = false;
 
 
-			float screenToWorld = viewBounds.getWidth() / static_cast<float>(frameWidth);
+			float screenToWorldScale = viewBounds.getWidth() / static_cast<float>(frameWidth);
 
 			// ======= keybinds =========
 			if (tabPressed) {
@@ -563,33 +603,6 @@ int main(void) {
 				leftPressed = false;
 			}
 
-			float mouseEcks = (mouseX / (float)frameWidth * 2.f - 1.f) * aspect;
-			float mouseWhy = (1.f - mouseY / (float)frameHeight) * 2.f - 1.f;
-			if (didMousePress) { // hit sound
-				for (int i = 0; i < 10; i++) {
-					if (mouseEcks > (aspect - 0.3f) && mouseWhy > -0.9f + (float)(9 - i) * 0.1f && mouseWhy < -0.9f + (float)((9 - i) + 1) * 0.1f) {
-						sprites[currentSprite]->colliders.at(selectedPolygon).isCustomHitSound = false;
-						sprites[currentSprite]->colliders.at(selectedPolygon).soundMaterial = (SoundMaterial)i;
-						didMousePress = false;
-						break;
-					}
-				}
-				for (int i = 0; i < (int)frictionPaths.size(); i++) {
-					if (mouseEcks > (aspect - 0.6f) && mouseEcks < (aspect - 0.3f) && mouseWhy > -0.8f + (float)i * 0.1f && mouseWhy < -0.8f + (float)(i + 1) * 0.1f) {
-						sprites[currentSprite]->colliders.at(selectedPolygon).physicsMaterial2DAssetPath = frictionPaths[i];
-						didMousePress = false;
-						break;
-					}
-				}
-				for (int i = 0; i < (int)customHitSoundNames.size(); i++) {
-					if (mouseEcks < -aspect + 0.3f && mouseWhy > -0.9f + (float)i * 0.1f && mouseWhy < -0.9f + (float)(i + 1) * 0.1f) {
-						sprites[currentSprite]->colliders.at(selectedPolygon).isCustomHitSound = true;
-						sprites[currentSprite]->colliders.at(selectedPolygon).customHitSoundName = customHitSoundNames.at(i);
-						didMousePress = false;
-						break;
-					}
-				}
-			}
 
 			if (didRightMousePress) {
 				polygonSplitStart = {worldMouseX, worldMouseY};
@@ -607,14 +620,15 @@ int main(void) {
 				std::unique_ptr<Sprite>& sprite = sprites[currentSprite];
 				selectedPolygon = 0;
 
-				std::vector<std::vector<Vec2f>> paths = Collider::generateCollidersFromImage(sprites[currentSprite]->image, sprites[currentSprite]->rect);
+				std::vector<std::vector<Vec2f>> paths = Collider::generateCollidersFromImage(sprites[currentSprite]->image, sprites[currentSprite]->rect, colliderAlphaThreshold);
 
 				sprite->colliders.clear();
-				sprite->colliders.push_back({{}, SoundMaterial::cardboard, false, "", ""});
+				sprite->colliders.push_back({{}, defaultPhysicsMaterialAssetPath, defaultSoundMaterial, defaultIsCustomHitSound, defaultCustomHitSoundName, 128, 128, 128});
 				Collider* poly = &sprite->colliders.at(0);
 
 				if (paths.size() > 0) {
 					poly->points = paths[0];
+					Collider::simplifyPath(poly->points, douglasPeuckerEpsilon, colliderSmoothSteps);
 					float invPixelsPerUnit = 1.f / sprite->pixelsPerUnit;
 					float halfWidth = sprite->getWidth() / 2.f;
 					float halfHeight = sprite->getHeight() / 2.f;
@@ -624,19 +638,45 @@ int main(void) {
 					});
 				}
 
+				// set color of collider
+				float weight = 0.f;
+				float averageR = 0.f;
+				float averageG = 0.f;
+				float averageB = 0.f;
+				for (int y = sprite->rect.minY; y < sprite->rect.maxY; y += 5) {
+					for (int x = sprite->rect.minX; x < sprite->rect.maxX; x += 5) {
+						float r, g, b, a;
+						sprite->image->getNormalizedPixelRGBA(x, y, &r, &g, &b, &a);
+						averageR += r * a;
+						averageG += g * a;
+						averageB += b * a;
+						weight += a;
+					}
+				}
+				if (weight < 0.00001f) {
+					weight = 1.f;
+				}
+				poly->r = static_cast<uint8_t>(averageR / weight * 255.f);
+				poly->g = static_cast<uint8_t>(averageG / weight * 255.f);
+				poly->b = static_cast<uint8_t>(averageB / weight * 255.f);
+
 
 				gPressed = false;
 			}
 
-			//get closest point for deleting points or moving
+			//get closest points and lines for deleting points or moving
 			int closestPoint = -1;
 			int closestLine = -1;
 			if (sprites.size() > 0 && sprites[currentSprite]->colliders.size() > 0) {
+				std::unique_ptr<Sprite>& sprite = sprites[currentSprite];
+				Collider& collider = sprite->colliders.at(selectedPolygon);
+
+				// get closest point ================
 				float closestDistance = 0.f;
-				int polygonPoints = sprites[currentSprite]->colliders.at(selectedPolygon).points.size();
+				int polygonPoints = collider.points.size();
 				for (int j = 0; j < polygonPoints; j++) {
-					float x1 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at(j).x;
-					float y1 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at(j).y;
+					float x1 = collider.points.at(j).x;
+					float y1 = collider.points.at(j).y;
 
 					float dist = sqrt((worldMouseX - x1) * (worldMouseX - x1) + (worldMouseY - y1) * (worldMouseY - y1));
 					if (dist < closestDistance || closestPoint == -1) {
@@ -645,25 +685,11 @@ int main(void) {
 					}
 				}
 
-				if (!spaceDown && closestPoint != -1 && std::max(std::abs(sprites[currentSprite]->colliders.at(selectedPolygon).points.at(closestPoint).x - worldMouseX), std::abs(sprites[currentSprite]->colliders.at(selectedPolygon).points.at(closestPoint).y - worldMouseY)) < screenToWorld * 5.f) {
-					if (didMousePress) {
-						if (ctrlKeyDown && polygonPoints > 3) {
-							sprites[currentSprite]->colliders.at(selectedPolygon).points.erase(sprites[currentSprite]->colliders.at(selectedPolygon).points.begin() + closestPoint);
-
-							polygonPoints--;
-							closestPoint = -1;
-						} else {
-							draggingPoint = closestPoint;
-						}
-						didMousePress = false;
-					}
-				} else closestPoint = -1;
-
-				//get closest line
+				// get closest line =====================
 				float closestLineDistance = 0.f;
 				for (int j = 0; j < polygonPoints; j++) {
-					Vec2f p1 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at(j);
-					Vec2f p2 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at((j + 1) % polygonPoints);
+					Vec2f p1 = collider.points.at(j);
+					Vec2f p2 = collider.points.at((j + 1) % polygonPoints);
 
 					float dist = distanceFromPointToLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
 					float progress = getPointProgressAlongLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
@@ -672,16 +698,33 @@ int main(void) {
 						closestLine = j;
 					}
 				}
-				// add point if press on line
-				if (!spaceDown && !ctrlKeyDown && closestLine != -1 && closestLineDistance < screenToWorld * 5.f && closestPoint == -1 && draggingPoint == -1) {
+
+				// start dragging point if clicked ==========
+				if (!io.WantCaptureMouse && !spaceDown && closestPoint != -1 && std::max(std::abs(collider.points.at(closestPoint).x - worldMouseX), std::abs(collider.points.at(closestPoint).y - worldMouseY)) < screenToWorldScale * pointSelectRadius) {
 					if (didMousePress) {
-						Vec2f p1 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at(closestLine);
-						Vec2f p2 = sprites[currentSprite]->colliders.at(selectedPolygon).points.at((closestLine + 1) % polygonPoints);
+						if (ctrlKeyDown && polygonPoints > 3) {
+							collider.points.erase(collider.points.begin() + closestPoint);
+
+							polygonPoints--;
+							closestPoint = -1;
+						} else {
+							draggingPoint = closestPoint;
+							draggingPointScreenOffsetFromMouse = worldToScreen(collider.points.at(draggingPoint)) - Vec2f(mouseX, mouseY);
+						}
+						didMousePress = false;
+					}
+				} else closestPoint = -1;
+				// add point if press on line
+				if (!io.WantCaptureMouse && !spaceDown && !ctrlKeyDown && closestLine != -1 && closestLineDistance < screenToWorldScale * lineSelectDistance && closestPoint == -1 && draggingPoint == -1) {
+					if (didMousePress) {
+						Vec2f p1 = collider.points.at(closestLine);
+						Vec2f p2 = collider.points.at((closestLine + 1) % polygonPoints);
 						float progress = getPointProgressAlongLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
 						Vec2f pointOnLine = Vec2f::lerp(p1, p2, progress);
-						sprites[currentSprite]->colliders.at(selectedPolygon).points.insert(sprites[currentSprite]->colliders.at(selectedPolygon).points.begin() + closestLine + 1, pointOnLine);
+						collider.points.insert(collider.points.begin() + closestLine + 1, pointOnLine);
 						closestPoint = closestLine + 1;
 						draggingPoint = closestLine + 1;
+						draggingPointScreenOffsetFromMouse = worldToScreen(collider.points.at(draggingPoint)) - Vec2f(mouseX, mouseY);
 						closestLine = -1;
 						polygonPoints++;
 						didMousePress = false;
@@ -689,15 +732,15 @@ int main(void) {
 				} else closestLine = -1;
 
 				// select polygon
-				if (didMousePress && closestLine == -1 && closestPoint == -1) {
-					for (int i = 0; i < (int)sprites[currentSprite]->colliders.size(); i++) {
+				if (!io.WantCaptureMouse && didMousePress && closestLine == -1 && closestPoint == -1) {
+					for (int i = 0; i < (int)sprite->colliders.size(); i++) {
 						int howManyIntersections = 0;
-						int polygonPoints = sprites[currentSprite]->colliders.at(i).points.size();
+						int polygonPoints = sprite->colliders.at(i).points.size();
 						for (int j = 0; j < polygonPoints; j++) {
 							Vec2f intersection;
 							if (lineIntersection(
-								sprites[currentSprite]->colliders.at(i).points.at(j),
-												 sprites[currentSprite]->colliders.at(i).points.at((j + 1) % polygonPoints),
+								sprite->colliders.at(i).points.at(j),
+												 sprite->colliders.at(i).points.at((j + 1) % polygonPoints),
 												 {worldMouseX, worldMouseY},
 							{worldMouseX + 100.f, worldMouseY},
 							&intersection
@@ -714,22 +757,82 @@ int main(void) {
 				}
 			}
 
+			if (!io.WantCaptureMouse) {
+				if (closestPoint != -1) {
+					glfwSetCursor(window, handCursor);
+				} else {
+					glfwSetCursor(window, arrowCursor);
+				}
+			}
+
 
 			if (didMouseRelease) {
 				draggingPoint = -1;
 			}
 			didMouseRelease = false;
 
+			// drag point =======
 			if (selectedPolygon != -1 && draggingPoint != -1) {
-				sprites[currentSprite]->colliders.at(selectedPolygon).points.at(draggingPoint).x = worldMouseX;
-				sprites[currentSprite]->colliders.at(selectedPolygon).points.at(draggingPoint).y = worldMouseY;
+				sprites[currentSprite]->colliders.at(selectedPolygon).points.at(draggingPoint).x = worldMouseX + draggingPointScreenOffsetFromMouse.x * screenToWorldScale;
+				sprites[currentSprite]->colliders.at(selectedPolygon).points.at(draggingPoint).y = worldMouseY - draggingPointScreenOffsetFromMouse.y * screenToWorldScale;
 			}
 
+			// ====== save json ==============
 			if (sPressed && ctrlKeyDown) {
+				json j;
+				j["projectAssetsPath"] = projectAssetsPath.string();
+				j["sprites"] = json::array();
+				for (const std::unique_ptr<Sprite>& sprite : sprites) {
+					json spriteObject;
+					spriteObject["objectPath"] = sprite->objectPath;
+					spriteObject["texturePath"] = sprite->texturePath;
+					spriteObject["rectMinX"] = sprite->rect.minX;
+					spriteObject["rectMinY"] = sprite->rect.minY;
+					spriteObject["rectMaxX"] = sprite->rect.maxX;
+					spriteObject["rectMaxY"] = sprite->rect.maxY;
+					spriteObject["posX"] = sprite->position.x;
+					spriteObject["posY"] = sprite->position.y;
+					spriteObject["posZ"] = sprite->position.z;
+					spriteObject["rotX"] = sprite->rotation.x;
+					spriteObject["rotY"] = sprite->rotation.y;
+					spriteObject["rotZ"] = sprite->rotation.z;
+					spriteObject["scaX"] = sprite->scale.x;
+					spriteObject["scaY"] = sprite->scale.y;
+					spriteObject["scaZ"] = sprite->scale.z;
+					spriteObject["pixelsPerUnit"] = sprite->pixelsPerUnit;
+					spriteObject["sortingOrder"] = sprite->sortingOrder;
+					spriteObject["colliders"] = json::array();
+					for (const Collider& collider : sprite->colliders) {
+						json colliderObject;
+						colliderObject["xPositions"] = json::array();
+						colliderObject["yPositions"] = json::array();
+						for (const Vec2f& point : collider.points) {
+							colliderObject["xPositions"].push_back(point.x);
+							colliderObject["yPositions"].push_back(point.y);
+						}
+						colliderObject["physicsMaterialAssetPath"] = collider.physicsMaterialAssetPath;
+						colliderObject["soundMaterial"] = (int)collider.soundMaterial;
+						colliderObject["isCustomHitSound"] = collider.isCustomHitSound;
+						colliderObject["customHitSoundName"] = collider.customHitSoundName;
+						colliderObject["r"] = collider.r;
+						colliderObject["g"] = collider.g;
+						colliderObject["b"] = collider.b;
+
+						spriteObject["colliders"].push_back(colliderObject);
+					}
+
+					j["sprites"].push_back(spriteObject);
+				}
+				std::string serializedJson = j.dump();
+
+				std::ofstream jsonFile;
+				jsonFile.open(projectAssetsPath / "colliderworkshop_unity.json");
+				jsonFile << serializedJson;
+				jsonFile.close();
 			}
 			sPressed = false;
 
-			glClearColor(0.4f, 0.4f, 0.4f, 1.f);
+			glClearColor(clearColor[0], clearColor[1], clearColor[2], 1.f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			glm::mat4 viewMatrix = glm::ortho(viewBounds.minX, viewBounds.maxX, viewBounds.minY, viewBounds.maxY, -1.f, 1.f);
@@ -766,19 +869,37 @@ int main(void) {
 
 						bool isLineRed = ctrlKeyDown && (j == closestPoint || ((j + 1) % polygonPoints) == closestPoint);
 						bool isLineClosest = j == closestLine;
-						renderLine(p1, p2, screenToWorld * 1.5f, lineShader, viewMatrix, VAO, 1.f, isLineRed ? 0.f : 1.f, isLineClosest ? 1.f : 0.f, i == selectedPolygon ? 1.f : 0.2f);
+						renderLine(
+							p1, p2,
+							isLineClosest ? screenToWorldScale * lineWidth * 1.5f : screenToWorldScale * lineWidth,
+							lineShader, viewMatrix, VAO,
+							1.f,
+							isLineRed ? 0.f : 1.f,
+							isLineClosest ? 1.f : 0.f,
+							i == selectedPolygon ? 1.f : 0.2f
+						);
 
-						// point
+						// draw points
 						bool isPointRed = ctrlKeyDown && j == closestPoint;
-						bool isPointSelected = j == draggingPoint || (j == closestPoint && draggingPoint == -1);
-						renderCircle(p1, screenToWorld * 5.f, circleShader, viewMatrix, VAO, 1.f, isPointRed ? 0.f : 1.f, isPointSelected ? 1.f : 0.f, i == selectedPolygon ? 0.5f : 0.1f);
+						bool isPointHovered = j == draggingPoint || (j == closestPoint && draggingPoint == -1);
+						renderCircle(
+							p1,
+							isPointHovered ? screenToWorldScale * pointRadius * 1.5f : screenToWorldScale * pointRadius,
+							circleShader, viewMatrix, VAO,
+							1.f,
+							isPointRed ? 0.f : 1.f,
+							isPointHovered ? 1.f : 0.f,
+							i == selectedPolygon ? 0.5f : 0.1f
+						);
 					}
 				}
 			}
 
 			// split line
 			if (isDrawingSplitLine) {
-				renderLine(polygonSplitStart, polygonSplitEnd, screenToWorld * 1.5f, lineShader, viewMatrix, VAO, 0.1f, 1.f, 1.f, 1.f);
+				renderLine(polygonSplitStart, polygonSplitEnd, screenToWorldScale * lineWidth, lineShader, viewMatrix, VAO, 0.1f, 0.5f, 1.f, 1.f);
+				renderCircle(polygonSplitStart, screenToWorldScale * pointRadius, circleShader, viewMatrix, VAO, 0.1f, 0.5f, 1.f, 1.f);
+				renderCircle(polygonSplitEnd  , screenToWorldScale * pointRadius, circleShader, viewMatrix, VAO, 0.1f, 0.5f, 1.f, 1.f);
 			}
 
 			// point on line
@@ -788,7 +909,7 @@ int main(void) {
 				float progress = getPointProgressAlongLine(Vec2f(worldMouseX, worldMouseY), p1, p2);
 				Vec2f pointOnLine = Vec2f::lerp(p1, p2, progress);
 
-				renderCircle(pointOnLine, screenToWorld * 5.f, circleShader, viewMatrix, VAO, 1.f, 1.f, 0.5f, 1.f);
+				renderCircle(pointOnLine, screenToWorldScale * pointRadius, circleShader, viewMatrix, VAO, 1.f, 1.f, 0.5f, 1.f);
 			}
 
 
@@ -813,18 +934,148 @@ int main(void) {
 			renderText(glyphShader, "<> - Switch polygon", -aspect + 0.05f, 0.7f, 0.001f, glm::vec4(1.f, 1.f, 1.f, 1.f), VAO, &screenSpaceProj);*/
 
 			// render ImGui
-			if (ImGui::Begin("Collider workshop")) {
-				if (sprites.size() > 0) {
-					ImGui::Text("Sprite: %d/%d", currentSprite + 1, (int)sprites.size());
-					ImGui::Text("Sprite object: %s", sprites[currentSprite]->objectPath.c_str());
+			if (ImGui::Begin("Collider workshop", nullptr, ImGuiWindowFlags_NoNav)) {
+				if (ImGui::CollapsingHeader("UI settings")) {
+					ImGui::ColorEdit3("Background color", clearColor);
+					ImGui::SliderFloat("Line width", &lineWidth, 0.f, 5.f);
+					ImGui::SliderFloat("Point radius", &pointRadius, 0.f, 10.f);
+					ImGui::SliderFloat("Line select distance", &lineSelectDistance, 0.f, 30.f);
+					ImGui::SliderFloat("Point select radius", &pointSelectRadius, 0.f, 30.f);
+					static bool linear = true;
+					if (ImGui::Checkbox("Texture linear filtering", &linear)) {
+						for (auto& it : loadedImages) {
+							it.second->setTextureFilter(linear);
+						}
+					}
+					ImGui::Separator();
 				}
-				//ImGui::Text("Sprites selected: %d", (int)selection.size());
-				//ImGui::ColorEdit3("Background color", clearColor);
-				//ImGui::Checkbox("Show grid", &showGrid);
+				if (ImGui::CollapsingHeader("Collider generation settings")) {
+					ImGui::SliderFloat("Alpha threshold", &colliderAlphaThreshold, 0.f, 1.f);
+					ImGui::SliderInt("Smooth steps", &colliderSmoothSteps, 0, 5);
+					ImGui::SliderFloat("Douglas-Peucker epsilon", &douglasPeuckerEpsilon, 0.f, 15.f);
+					ImGui::Separator();
+					ImGui::Text("Default settings:");
+
+					std::string physicsMaterialName = "???";
+					if (physicsMaterials.count(defaultPhysicsMaterialAssetPath)) {
+						physicsMaterialName = physicsMaterials.at(defaultPhysicsMaterialAssetPath).displayName;
+					}
+					if (ImGui::BeginCombo("Physics material##default", physicsMaterialName.c_str())) {
+						int n = 0;
+						for (auto& it : physicsMaterials) {
+							bool is_selected = it.first == defaultPhysicsMaterialAssetPath;
+							if (ImGui::Selectable((it.second.displayName + "##" + std::to_string(n)).c_str(), is_selected)) {
+								defaultPhysicsMaterialAssetPath = it.first;
+							}
+							if (is_selected) {
+								ImGui::SetItemDefaultFocus();
+							}
+							n++;
+						}
+						ImGui::EndCombo();
+					}
+
+					// hit sound select
+					ImGui::Checkbox("Custom hit sound##default", &defaultIsCustomHitSound);
+					if (defaultIsCustomHitSound) {
+						if (ImGui::BeginCombo("Custom hit sound##defaultcombo", defaultCustomHitSoundName.c_str())) {
+							int n = 0;
+							for (const std::string& customHitSound : customHitSounds) {
+								bool is_selected = customHitSound == defaultCustomHitSoundName;
+								if (ImGui::Selectable((customHitSound + "##" + std::to_string(n)).c_str(), is_selected)) {
+									defaultCustomHitSoundName = customHitSound;
+								}
+								if (is_selected) {
+									ImGui::SetItemDefaultFocus();
+								}
+								n++;
+							}
+							ImGui::EndCombo();
+						}
+					} else {
+						if (ImGui::BeginCombo("Hit sound##defaultcombo", soundMaterialNames[(int)defaultSoundMaterial].c_str())) {
+							for (int n = 0; n < 10; n++) {
+								bool is_selected = (int)defaultSoundMaterial == n;
+								if (ImGui::Selectable(soundMaterialNames[n].c_str(), is_selected)) {
+									defaultSoundMaterial = (SoundMaterial)n;
+								}
+								if (is_selected) {
+									ImGui::SetItemDefaultFocus();
+								}
+							}
+							ImGui::EndCombo();
+						}
+					}
+					ImGui::Separator();
+				}
+				ImGui::Text("Sprite: %d/%d", currentSprite + 1, (int)sprites.size());
+				if (sprites.size() > 0) {
+					std::unique_ptr<Sprite>& sprite = sprites[currentSprite];
+
+					ImGui::Text("Sprite object: %s", sprite->objectPath.c_str());
+
+					ImGui::Separator();
+					ImGui::Text("Collider %d/%d", selectedPolygon + 1, (int)sprite->colliders.size());
+					if (sprite->colliders.size() > 0) {
+						Collider& collider = sprite->colliders[selectedPolygon];
+						ImGui::Text("Points: %d", (int)collider.points.size());
+
+						ImGui::Separator();
+						// physics material select
+						int n = 0;
+						for (auto& it : physicsMaterials) {
+							bool is_selected = it.first == collider.physicsMaterialAssetPath;
+							if (ImGui::Selectable((it.second.displayName + "##" + std::to_string(n)).c_str(), is_selected)) {
+								collider.physicsMaterialAssetPath = it.first;
+							}
+							if (is_selected) {
+								ImGui::SetItemDefaultFocus();
+							}
+							n++;
+						}
+
+						ImGui::Separator();
+						// hit sound select
+						ImGui::Checkbox("Custom hit sound", &collider.isCustomHitSound);
+						if (collider.isCustomHitSound) {
+							int n = 0;
+							for (const std::string& customHitSound : customHitSounds) {
+								bool is_selected = customHitSound == collider.customHitSoundName;
+								if (ImGui::Selectable((customHitSound + "##" + std::to_string(n)).c_str(), is_selected)) {
+									collider.customHitSoundName = customHitSound;
+								}
+								if (is_selected) {
+									ImGui::SetItemDefaultFocus();
+								}
+								n++;
+							}
+						} else {
+							for (int n = 0; n < 10; n++) {
+								bool is_selected = (int)collider.soundMaterial == n;
+								if (ImGui::Selectable(soundMaterialNames[n].c_str(), is_selected)) {
+									collider.soundMaterial = (SoundMaterial)n;
+								}
+								if (is_selected) {
+									ImGui::SetItemDefaultFocus();
+								}
+							}
+						}
+						float hitColor[3] = {static_cast<float>(collider.r) / 255.f, static_cast<float>(collider.g) / 255.f, static_cast<float>(collider.b) / 255.f};
+						ImGui::ColorEdit3("Hit color", hitColor);
+						collider.r = static_cast<uint8_t>(hitColor[0] * 255.f);
+						collider.g = static_cast<uint8_t>(hitColor[1] * 255.f);
+						collider.b = static_cast<uint8_t>(hitColor[2] * 255.f);
+					}
+				}
 			}
 			ImGui::End();
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+			// deselect imgui window
+			if ((ImGui::IsMouseClicked(0) || ImGui::IsMouseClicked(1) || ImGui::IsMouseClicked(2)) && !ImGui::IsAnyItemHovered() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+				ImGui::SetWindowFocus(nullptr);      // un-focuses all windows
+			}
 
 
 			// final stuff
@@ -840,6 +1091,11 @@ int main(void) {
 			}
 		}
 	} // after dragged file into window
+
+	// destroy cursors
+	glfwDestroyCursor(arrowCursor);
+	glfwDestroyCursor(handCursor);
+
 	glfwTerminate();
 
 	return 0;

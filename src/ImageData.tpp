@@ -251,6 +251,14 @@ void ImageData<T>::bindTexture() {
 	glBindTexture(GL_TEXTURE_2D, texture);
 }
 
+template <typename T>
+void ImageData<T>::setTextureFilter(bool linear) {
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 
 template <typename T>
 template <typename newType>

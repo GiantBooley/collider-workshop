@@ -46,6 +46,7 @@ public:
 
     void loadTexture() override;
     void bindTexture() override;
+	void setTextureFilter(bool linear) override;
 
     //void saveToFile(std::string fileName) const override;
     void convertColorChannels(size_t newColorChannels) override;

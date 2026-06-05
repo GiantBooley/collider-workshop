@@ -1,10 +1,16 @@
+# editor files
+.vscode/
+*.kdev4
+.kdev4/
+
+# build files
 CMakeFiles/
 cmake_install.cmake
 CMakeCache.txt
 Makefile
 .cmake/
 compile_commands.json
-.vscode/
-*.kdev4
-.kdev4/
 build/
+
+# cache files
+.cache/

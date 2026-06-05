@@ -4,6 +4,10 @@
 int realMod(int a, int b) {
 	if (a >= 0) return a % b; else return (b >= 0 ? b : -b) - 1 + (a + 1) % b;
 }
+float mapRange(float value, float oldMin, float oldMax, float newMin, float newMax) {
+	float t = (value - oldMin) / (oldMax - oldMin);
+	return (newMax - newMin) * t + newMin;
+}
 
 // Vec2f
 Vec2f::Vec2f() : x(0.f), y(0.f) {}
@@ -17,6 +21,19 @@ float Vec2f::dot(Vec2f v1, Vec2f v2) {
 }
 Vec2f Vec2f::lerp(Vec2f p1, Vec2f p2, float t) {
 	return Vec2f(std::lerp(p1.x, p2.x, t), std::lerp(p1.y, p2.y, t));
+}
+
+Vec2f Vec2f::operator+(const Vec2f& other) const {
+	return Vec2f(x + other.x, y + other.y);
+}
+Vec2f Vec2f::operator-(const Vec2f& other) const {
+	return Vec2f(x - other.x, y - other.y);
+}
+Vec2f Vec2f::operator+(const float& other) const {
+	return Vec2f(x + other, y + other);
+}
+Vec2f Vec2f::operator-(const float& other) const {
+	return Vec2f(x - other, y - other);
 }
 
 float getAbsAngleFromThreePoints(Vec2f p1, Vec2f p2, Vec2f p3) {// p1 is vertex
@@ -72,9 +89,9 @@ Vec2i Vec2i::operator+(const Vec2i& other) const {
 Vec2i Vec2i::operator-(const Vec2i& other) const {
 	return Vec2i(x - other.x, y - other.y);
 }
-Vec2i Vec2i::operator+(const float& other) const {
+Vec2i Vec2i::operator+(const int& other) const {
 	return Vec2i(x + other, y + other);
 }
-Vec2i Vec2i::operator-(const float& other) const {
+Vec2i Vec2i::operator-(const int& other) const {
 	return Vec2i(x - other, y - other);
 }
